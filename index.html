@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>離線會議記錄生成器</title>
+<meta name="theme-color" content="#1F3864">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="會議記錄">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{--bg:#f5f6f8;--card:#fff;--ink:#1d2330;--muted:#6b7385;--line:#e2e5ec;--pri:#2457d6;--pri2:#e8eefc;--red:#d23b3b;--green:#1f8a4c;--amber:#b7791f}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,"Segoe UI","PingFang TC","Microsoft JhengHei",sans-serif}
+header{background:var(--ink);color:#fff;padding:14px 18px;padding-top:max(14px,env(safe-area-inset-top))}
+header h1{margin:0;font-size:18px}
+header p{margin:2px 0 0;font-size:12px;color:#b9c0d0}
+main{max-width:980px;margin:0 auto;padding:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.card h2{font-size:16px;margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.step{display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--pri);color:#fff;font-size:12px;align-items:center;justify-content:center}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:640px){.grid{grid-template-columns:1fr}}
+label{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
+input,select,textarea{width:100%;font:inherit;border:1px solid var(--line);border-radius:7px;padding:8px 10px;background:#fff;color:var(--ink)}
+textarea{resize:vertical}
+#transcript{min-height:220px;font-size:14px}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:7px;padding:8px 14px;cursor:pointer}
+button:hover{background:#f0f2f6}
+button.pri{background:var(--pri);border-color:var(--pri);color:#fff}
+button.pri:hover{background:#1c47b3}
+button.rec{background:var(--red);border-color:var(--red);color:#fff;font-weight:600}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.sm{padding:3px 9px;font-size:13px}
+button.x{border:none;color:var(--muted);padding:2px 8px;background:none}
+button.x:hover{color:var(--red)}
+.status{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dot{width:10px;height:10px;border-radius:50%;background:#bbb;display:inline-block}
+.dot.on{background:var(--red);animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.3}}
+.timer{font-variant-numeric:tabular-nums;font-weight:600;color:var(--ink)}
+.pill{font-size:12px;padding:2px 8px;border-radius:20px;background:#eef0f4;color:var(--muted)}
+.pill.ok{background:#e3f4ea;color:var(--green)}
+.pill.warn{background:#fdf3e1;color:var(--amber)}
+.pill.bad{background:#fbe6e6;color:var(--red)}
+#interim{font-size:13px;color:var(--pri);min-height:1.4em;margin-top:4px}
+.hint{font-size:12px;color:var(--muted);margin:6px 0 0}
+.wbox{border:1px dashed #b9c4dc;background:#f8faff;border-radius:8px;padding:10px 12px;margin:8px 0 12px}
+.wtitle{font-weight:600;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#mSummary{min-height:64px;font-size:14px}
+.section{margin-top:12px}
+.section h3{font-size:15px;margin:0 0 8px;padding-bottom:4px;border-bottom:2px solid var(--pri2);display:flex;justify-content:space-between;align-items:center}
+.topic{border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px}
+.topic .row{display:flex;gap:6px;align-items:center}
+.topic textarea{margin-top:6px;min-height:110px;font-size:14px}
+.kw{font-size:12px;color:var(--muted);margin-top:4px}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;color:var(--muted);text-align:left;font-weight:500;padding:4px}
+td{padding:3px;vertical-align:top}
+td input{padding:6px 8px;font-size:14px}
+td.n{width:28px;color:var(--muted);font-size:13px;padding-top:9px}
+.empty{font-size:13px;color:var(--muted);padding:6px 2px}
+#mdOut{min-height:200px;font:13px/1.5 Consolas,Menlo,monospace;background:#fafbfc}
+audio{width:100%;margin-top:6px}
+.tl{font-size:12px;color:var(--muted)}
+#printArea{display:none}
+@media(max-width:640px){
+  table,tbody,tr,td{display:block;width:100%}
+  thead{display:none}
+  tr{border:1px solid var(--line);border-radius:8px;padding:6px;margin-bottom:6px}
+  td.n{display:none}
+}
+@media print{
+  header,main{display:none!important}
+  #printArea{display:block;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  #printArea table{page-break-inside:auto}#printArea tr{page-break-inside:avoid}
+  @page{size:A4;margin:14mm 14mm}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎙️ 離線會議記錄生成器</h1>
+  <p>錄音 → 逐字稿 → 自動整理「討論議題 / 待處理事項 / 待確認事項」｜分析全部在本機完成，資料不會上傳 <span id="netState"></span></p>
+</header>
+<main>
+
+<section class="card">
+  <h2><span class="step">1</span>會議資訊</h2>
+  <div class="grid">
+    <div><label>會議名稱</label><input id="mTitle" placeholder="例如：專案週會"></div>
+    <div><label>日期時間</label><input id="mDate" type="datetime-local"></div>
+    <div><label>與會者（用逗號分隔，可提升 DRI 辨識）</label><input id="mAttendees" placeholder="例如：小王, Kevin, Amy"></div>
+    <div><label>會議地點</label><input id="mPlace" placeholder="例如：B棟 3F 會議室 / Teams"></div>
+    <div><label>主持人</label><input id="mHost" placeholder="選填"></div>
+    <div><label>記錄人</label><input id="mWriter" placeholder="選填"></div>
+    <div><label>主要語言（語音辨識用）</label>
+      <select id="mLang">
+        <option value="zh-TW">中文（台灣）＋夾雜英文</option>
+        <option value="zh-CN">中文（大陸）＋夾雜英文</option>
+        <option value="en-US">English</option>
+      </select>
+    </div>
+  </div>
+</section>
+
+<section class="card">
+  <h2><span class="step">2</span>錄音與逐字稿</h2>
+  <div class="btns">
+    <button id="btnRec" class="rec">● 開始錄音</button>
+    <button id="btnPause" disabled>❚❚ 暫停</button>
+    <button id="btnStop" disabled>■ 結束</button>
+    <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:14px;color:var(--ink)"><input type="checkbox" id="chkSR" checked style="width:auto"> 同步即時轉文字</label>
+  </div>
+  <div class="status">
+    <span class="dot" id="dot"></span><span class="timer" id="timer">00:00</span>
+    <span>語音辨識：</span><span class="pill" id="srPill">檢查中…</span>
+    <button class="sm" id="btnInstall" style="display:none">下載離線語音包（僅需一次）</button>
+  </div>
+  <div id="interim"></div>
+  <audio id="player" controls style="display:none"></audio>
+  <div class="btns" style="margin-top:4px">
+    <button class="sm" id="btnDlAudio" disabled>⬇ 下載錄音檔</button>
+    <button class="sm" id="btnImport">📄 匯入逐字稿（txt / srt / vtt）</button>
+    <button class="sm" id="btnSample">載入範例</button>
+    <button class="sm" id="btnClearT">清除逐字稿</button>
+    <input type="file" id="fileIn" accept=".txt,.md,.srt,.vtt,text/plain" style="display:none">
+  </div>
+  <div class="wbox">
+    <div class="wtitle">🎧 匯入錄音檔轉文字 <span class="pill">本機運算，錄音不上傳</span></div>
+    <div class="btns" style="margin:6px 0">
+      <button id="btnAudioIn" class="pri">選擇錄音檔（m4a / mp3 / wav / webm）</button>
+      <button id="btnAudioRec" disabled>用剛剛的錄音轉文字</button>
+      <select id="wModel" style="width:auto">
+        <option value="onnx-community/whisper-tiny">快速（約 40MB）</option>
+        <option value="onnx-community/whisper-base" selected>標準（約 80MB）</option>
+        <option value="onnx-community/whisper-small">精準（約 250MB，建議用電腦）</option>
+      </select>
+      <button id="btnAudioCancel" class="sm" style="display:none">取消</button>
+    </div>
+    <progress id="wProg" value="0" max="100" style="width:100%;display:none"></progress>
+    <div class="hint" id="wStatus" style="margin:2px 0 0">第一次使用要連網下載語音模型，之後這台設備就能離線轉文字。收音不清楚的會議，建議用這個功能重新轉一次。</div>
+    <input type="file" id="audioIn" accept="audio/*,video/mp4,.m4a,.mp3,.wav,.webm,.ogg,.aac,.flac" style="display:none">
+  </div>
+  <label>逐字稿（可直接編輯、貼上，或手打筆記；一行一句最準。可用「議題：」「待辦：」「待確認：」「決議：」開頭標示）</label>
+  <textarea id="transcript" placeholder="[00:05] 第一個議題是……&#10;[00:20] Kevin will prepare the training materials by Friday.&#10;[00:35] 這個要再跟客戶確認一下。"></textarea>
+  <p class="hint" id="srHint"></p>
+  <p class="hint" id="mobileHint" style="display:none">📱 手機錄音時請保持本畫面開著：鎖屏或切到其他 App，錄音會中斷。錄音期間會自動保持螢幕不關閉。</p>
+</section>
+
+<section class="card">
+  <h2><span class="step">3</span>會議記錄 <button class="pri" id="btnAnalyze">✨ 產生會議記錄</button></h2>
+  <p class="hint" style="margin-top:0">自動整理完可以直接修改，匯出時會套用你改過的內容。</p>
+  <div id="resultArea"><div class="empty">尚未產生。先錄音或貼上逐字稿，再按「產生會議記錄」。</div></div>
+</section>
+
+<section class="card">
+  <h2><span class="step">4</span>匯出</h2>
+  <div class="btns">
+    <button id="btnCopy">📋 複製文字</button>
+    <button id="btnDoc">⬇ Word (.doc)</button>
+    <button id="btnMd">⬇ Markdown (.md)</button>
+    <button id="btnPrint">🖨 列印 / 存成 PDF</button>
+    <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:14px;color:var(--ink)"><input type="checkbox" id="chkAppendix" style="width:auto"> 附上逐字稿</label>
+  </div>
+  <textarea id="mdOut" readonly></textarea>
+  <div class="btns"><button class="sm" id="btnReset">🗑 清除全部（開新會議）</button></div>
+  <p class="tl">內容會自動暫存在這個瀏覽器；錄音檔不會暫存，記得先下載。</p>
+</section>
+</main>
+<div id="printArea"></div>
+
+<!-- ===================== 分析引擎（純本機規則，無需網路） ===================== -->
+<script id="analyzer">
+const MeetingAnalyzer = (() => {
+  // ================= 基本工具 =================
+  const CJK = "\\u4e00-\\u9fff";
+  const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const fmt = sec => { sec = Math.max(0, Math.round(sec)); return String(Math.floor(sec / 60)).padStart(2, "0") + ":" + String(sec % 60).padStart(2, "0"); };
+  const isEn = s => !new RegExp("[" + CJK + "]").test(s);
+  const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+  // 讓口語變成記錄用語
+  function tidy(t) {
+    t = t.replace(/\s+/g, " ")
+      .replace(new RegExp("([" + CJK + "])\\s+([" + CJK + "])", "g"), "$1$2")
+      .replace(new RegExp("([" + CJK + "])\\s+([" + CJK + "])", "g"), "$1$2");
+    t = t.replace(/[，,、]{2,}/g, "，").replace(/^[\s，,、;；:：.。]+|[\s，,、;；:：。！？!?.]+$/g, "");
+    return t.trim();
+  }
+  const LEAD = /^(好的|好啦|好|那麼|那我們|那|嗯+|呃+|啊|欸|喔|哦|對對+|對|然後|所以說|所以|但是|不過|可是|而且|另外就是|另外|再來是|再來|還有就是|還有|就是說|就是|其實|基本上|ok|okay|so|and|but|um+|uh+|well|alright|right)(?=[\s，,]|[一-鿿]|$)[\s，,]*/i;
+  const TAIL = /(好不好|好嗎|可以嗎|對不對|對吧|ok嗎|OK嗎|沒問題吧|是不是|喔|啦|吧|耶|嘛|這樣子|這樣)[？?。]?$/;
+  function clean(t) {
+    t = tidy(t);
+    for (let i = 0; i < 5; i++) { const n = t.replace(LEAD, ""); if (n === t) break; t = n; }
+    for (let i = 0; i < 3; i++) t = t.replace(TAIL, "").replace(/[？?。]$/, "");
+    t = t.replace(/那個|這個部分|的部分|的部份|一下|的話|大概/g, m => m === "大概" ? "約" : "")
+      .replace(/(都)?已經|都已/g, "已").replace(/下下禮拜|下下星期/g, "下下週").replace(/下禮拜|下星期/g, "下週")
+      .replace(/上禮拜|上星期/g, "上週").replace(/這禮拜|這星期/g, "本週").replace(/禮拜|星期/g, "週")
+      .replace(/可以(?=[安完做提開交處上下準])/g, "").replace(/(?<=已[一-鿿]{1,4})了$/, "")
+      .replace(/那邊|這邊/g, "").replace(/我們要再|要再/g, "需再").replace(/^我們/, "");
+    return tidy(t);
+  }
+
+  // ================= 規則 =================
+  const R = {
+    explicit: /([負负][責责]|跟[進进]|追[蹤踪]|待[辦办]|行[動动][項项]|指派|action item|\btodo\b|to-do|follow[- ]?up|assign(ed)? to|\bowner\b|deadline)/i,
+    self: /(我[來来]|我[會会]|我去|我[們们][會会]|i'?ll\b|we'?ll\b|\bwill (send|prepare|update|check|follow|provide|share|draft|schedule|arrange|fix|review|finish|complete|submit|contact|deliver|look|work|set|create|organize|collect)|is going to|are going to|take care of)/i,
+    verb: /([處处]理|安排|[準准][備备]|完成|提供|更新|提交|寄|[發发][給给]|[發发]出|回[覆复]|整理|[規规][劃划]|[執执]行|[聯联][絡络系繫]|通知|修改|[調调]整|[導导]入|[評评]估|[測测]試|[驗验][證证]|排程|[設设]定|建立|上[傳传]|申[請请]|採[購购]|下[單单]|改善|[優优]化|[產产]出|彙整|回[報报]|提出|追|做|寫|改|send|prepare|update|provide|share|draft|schedule|arrange|fix|review|finish|complete|submit|contact|deliver|implement|test|verify|evaluate|order|collect|report)/i,
+    ask: /(請|请|麻[煩烦]|需要|必[須须]|記得|记得|務必|务必|要|\bplease\b|\bneed(s)? to\b|\bmust\b|\bshould\b|have to)/i,
+    confirm: /(待[確确][認认]|[確确][認认]|不[確确]定|待定|未定|尚未[決决]定|[還还][沒没][決决]定|再[問问]|[問问]一下|[問问][問问]看|[問问](客[戶户]|廠商|供[應应]商|採購|主管|老闆)|[詢询][問问]|[釐厘]清|核[對对]|查一下|\btbd\b|to be confirmed|\bconfirm|double[- ]check|check with|clarify|not sure|\bunsure\b|\bpending\b|verify with|find out)/i,
+    decideQ: /(要不要|是否|能不能|可不可以|[還还]是要|有[沒没]有要|[會会]不[會会]|\bwhether\b|should we|do we need|can we)/i,
+    question: /([嗎吗]|[？?])$/,
+    done: /(已[確确][認认]|[確确][認认](過|过|了|好了|完)|\bconfirmed\b)/i,
+    decision: /([決决]定|[結结][論论]|共[識识]|同意|定案|拍板|批准|核准|就[這这][樣样](決定|决定|定|辦|办)|就這麼定|\bagreed\b|\bdecided\b|\bdecision\b|conclusion|approved|let'?s go with|finali[sz]ed)/i,
+    opening: /(開始(今天|本次|這次)?的?.{0,6}(會議|週會|周会|例會|會)|今天(的)?會議(開始|先)|謝謝(大家|各位)|散會|今天就先到這|就先這樣|let'?s (get )?start|get started|thank(s| you) (all|everyone)|that'?s all)/i,
+    due: /((今天|明天)?(下班|中午|開會|会议|會議)前|今天|明天|後天|后天|月底|月初|年底|下下週[一二三四五六日天]?|(本|這|这|下)(個|个)?(週|周|月)[一二三四五六日天]?|(週|周)[一二三四五六日天]|\d{1,2}\s*[\/月]\s*\d{1,2}\s*[日號号]?|\d{1,2}\s*[號号]|\bEOD\b|\bEOW\b|end of (the )?(day|week|month)|(next |this )?(mon|tues|wednes|thurs|fri|satur|sun)day|tomorrow|tonight|next week|next month|(jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.? \d{1,2})(之前|以前|為止|前)?/i,
+  };
+  const BAD_OWNER = new Set("我們 我们 大家 你們 你们 他們 他们 我 你 他 她 We I You They It This That He She Who What Then So And But Also Let Please Next Need Our The If OK Okay Regarding Moving SOP UPH".split(" "));
+
+  // ================= 斷句（處理沒標點的語音辨識文字） =================
+  const BREAK = ["然後","所以","另外","接下來","再來","還有就是","但是","不過","可是","因為","首先","最後","目前","主要","現在","預計","那我們","好那","對了","那結論","結論就是","結論是","大家同意","這個我們","這個要","這部分要","這件事","第[一二三四五六七八九十]+(?:個|个)?(?:議題|點|項)","下一(?:個|个)?(?:議題|主題|項)"];
+  function splitClauses(text, names) {
+    const nameRe = names.length ? names.map(esc).join("|") : null;
+    const units = [];
+    text.split(/\r?\n/).forEach((line, li) => {
+      let t = line.trim(); if (!t || /^[—\-]{2}/.test(t)) return;
+      let time = "";
+      const m = t.match(/^\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s*/);
+      if (m) { time = m[1]; t = t.slice(m[0].length); }
+      let force = "", speaker = "";
+      const lm = t.match(/^([^\s:：，。,.]{1,12})\s*[:：]\s*(?=\S)/);
+      if (lm && !/^\d+$/.test(lm[1])) {
+        const L = lm[1].toLowerCase();
+        if (/^(待辦|待办|待處理|待处理|行動|行動項|action|actions|todo|ai|a\/i)$/.test(L)) force = "action";
+        else if (/^(待確認|待确认|確認|确认|tbd|confirm|open|待定)$/.test(L)) force = "confirm";
+        else if (/^(決議|决议|結論|结论|decision)$/.test(L)) force = "decision";
+        else if (/^(議題|议题|主題|主题|議程|议程|topic|agenda)\d*$/.test(L)) force = "topic";
+        else speaker = lm[1];
+        t = t.slice(lm[0].length);
+      }
+      // 標點斷句
+      t = t.replace(/([。！？!?；;])/g, "$1\n").replace(/([a-z0-9%)])\.(\s+|$)/gi, "$1.\n");
+      // 口語轉折斷句（前面至少有 4 個字才切）
+      const br = new RegExp("([" + CJK + "A-Za-z0-9%][^\\n]{3,}?)\\s*(?=(" + BREAK.join("|") + "))", "g");
+      t = t.replace(br, "$1\n");
+      // 點名：「（那）Kevin 你…」「小王你這邊…」
+      const who = "(?:" + (nameRe ? nameRe + "|" : "") + "[A-Z][a-z]+)";
+      t = t.replace(new RegExp("([" + CJK + "A-Za-z0-9%][^\\n]{2,}?)\\s*(?=(?:那\\s*)?" + who + "\\s*(?:你|妳|這邊|那邊|負責|來處理|會|幫忙))", "g"), "$1\n");
+      t.split("\n").forEach(p => {
+        p = p.trim(); if (!p) return;
+        // 太長又有逗號，依逗號切
+        const parts = (p.length > 50 && !isEn(p)) ? p.split(/(?<=[，,])/) : [p];
+        parts.forEach(q => { q = q.trim(); if (q) units.push({ raw: q, time, line: li, force, speaker }); });
+      });
+    });
+    // 太短的片段併回前一句
+    const out = [];
+    units.forEach(u => {
+      const c = clean(u.raw);
+      if (out.length && c.length < 3 && !R.decision.test(u.raw) && !R.confirm.test(u.raw) && out[out.length - 1].line === u.line) out[out.length - 1].raw += u.raw;
+      else out.push(u);
+    });
+    out.forEach((u, i) => u.idx = i);
+    return out;
+  }
+
+  // ================= 欄位擷取 =================
+  function findName(s, names) {
+    for (const a of names) { const re = /^[A-Za-z]/.test(a) ? new RegExp("\\b" + esc(a) + "\\b", "i") : new RegExp(esc(a)); if (re.test(s)) return a; }
+    return "";
+  }
+  function trimCn(n) { n = n.replace(/^(由|請|请|讓|让|叫|給|给|麻[煩烦]|交[給给]|那)+/, ""); for (let i = 2; i < n.length; i++) if (/[提幫帮協协處处負负確确寄發发準准完更整安跟追回來来會会去做寫写看查問问聯联通修調调評评測测驗验在先把再也就要這这你妳那]/.test(n[i])) return n.slice(0, i); return n; }
+  function findOwner(s, names) {
+    const a = findName(s, names); if (a) return a;
+    let m;
+    if ((m = s.match(/([A-Z][a-zA-Z]+|[一-鿿]{2,4})\s*(?:你|妳)(?:這邊|那邊)?/))) { const n = trimCn(m[1]); if (!BAD_OWNER.has(n) && n.length >= 2) return n; }
+    if ((m = s.match(/(?:由|請|请|麻[煩烦]|交[給给]|指派[給给]?)\s*([一-鿿]{2,4}|[A-Z][a-zA-Z]+)/))) { const n = trimCn(m[1]); if (!BAD_OWNER.has(n) && n.length >= 2) return n; }
+    if ((m = s.match(/([一-鿿]{2,4}|[A-Z][a-zA-Z]+)\s*(?:[負负][責责]|[來来][處处]理|[會会]去|跟[進进])/))) { const n = trimCn(m[1]); if (!BAD_OWNER.has(n) && n.length >= 2) return n; }
+    if ((m = s.match(/assign(?:ed)? to ([A-Z][a-zA-Z]+)/i))) return m[1];
+    if ((m = s.match(/\b([A-Z][a-z]+)\s+(?:will|is going to|to take|should|needs to|has to)\b/)) && !BAD_OWNER.has(m[1])) return m[1];
+    if ((m = s.match(/^([A-Z][a-z]+),?\s+(?:please|can you|could you)/)) && !BAD_OWNER.has(m[1])) return m[1];
+    if (/(我[來来]|我[會会]|我去|\bI'?ll\b|\bI will\b)/i.test(s)) return "（發言者）";
+    return "";
+  }
+  function findWith(s) {
+    let m;
+    if ((m = s.match(/(?:跟|和|與|与|向)\s*([一-鿿]{2,5}?|[A-Za-z][a-zA-Z]+)\s*(?:那邊|這邊)?\s*(?:再)?(?:確認|确认|[問问]|[釐厘]清|核[對对]|[詢询][問问]|[討讨][論论])/))) return m[1];
+    if ((m = s.match(/[問问](?:一下|問看)?\s*(客[戶户]|廠商|厂商|供[應应]商|採購|采购|主管|老闆|[A-Z][a-zA-Z]+)/))) return m[1];
+    if ((m = s.match(/(?:check|confirm|verify|clarify) with (?:the )?([A-Za-z]+)/i))) return m[1];
+    if ((m = s.match(/\bask (?:the )?([A-Za-z]+)/i))) return m[1];
+    return "";
+  }
+  function normWeek(s) { return s.replace(/下下禮拜|下下星期/g, "下下週").replace(/下禮拜|下星期/g, "下週").replace(/禮拜|星期/g, "週"); }
+  function findDue(s) { const m = normWeek(s).match(R.due); return m ? normDue(m[0]) : ""; }
+  function normDue(d) { return d.replace(/\s+(?=前)/g, "").replace(/\s+/g, " ").replace(/下禮拜|下星期/, "下週").replace(/禮拜|星期/, "週").replace(/之前|以前/, "前").trim(); }
+
+  // ================= 改寫 =================
+  function stripPeople(t, names) {
+    const who = "(?:" + (names.length ? names.map(esc).join("|") + "|" : "") + "[A-Z][a-z]+|[\\u4e00-\\u9fff]{2,3})";
+    const nameOnly = "(?:" + (names.length ? names.map(esc).join("|") + "|" : "") + "[A-Z][a-z]+)";
+    return t
+      .replace(new RegExp("^(那\\s*)?" + who + "\\s*(你|妳)(這邊|那邊)?\\s*"), "")
+      .replace(new RegExp("(由|請|请|麻煩|麻烦|交給|交给)\\s*" + who + "\\s*"), "")
+      .replace(new RegExp("^" + who + "\\s*(負責|负责|來|会|會)(?=[\\u4e00-\\u9fff])"), "")
+      .replace(/^(你|妳)(這邊|那邊)?/, "")
+      .replace(/^(我們會|我們|我來|我會|我去)/, "")
+      .replace(/[負负][責责]/, "")
+      .replace(/(跟|給)我(?=[一-鿿])/g, "")
+      .replace(new RegExp("(需要|請|讓)?\\s*" + nameOnly + "\\s*(?=(跟|和|與|向|確認|去|來|負責|整理|準備|提供|處理|追))", "g"), "");
+  }
+  const VERB_START = /^(追蹤|追|準備|完成|提供|更新|提交|寄|發|回報|回覆|整理|規劃|執行|聯絡|通知|修改|調整|導入|評估|測試|驗證|排程|設定|建立|上傳|申請|採購|下單|改善|優化|產出|彙整|提出|確認|安排|處理|做|寫|改|交)/;
+  function rewriteAction(s, names) {
+    if (isEn(s)) {
+      let t = tidy(s).replace(/^(so|and|ok|okay|well|then|also)[,\s]+/i, "");
+      t = t.replace(/^[A-Z][a-z]+,?\s+(will|is going to|needs to|should|has to|to|can you|could you|please)\s+/, "")
+        .replace(/^(I|we)('ll|\s+will|\s+need to|\s+should|\s+have to|\s+are going to|\s+am going to)\s+/i, "")
+        .replace(/^please\s+/i, "")
+        .replace(new RegExp("\\s*(by|before|until|no later than)\\s+" + R.due.source, "i"), "")
+        .replace(/\s+(next week|tomorrow|today|EOD|EOW)\b/i, "");
+      return cap(tidy(t));
+    }
+    let t = clean(stripPeople(clean(s), names));
+    t = t.replace(new RegExp(R.due.source, "ig"), "，").replace(/(^|，)\s*(要|需要|需|必須|記得|幫忙|幫我|再|先)+/g, "$1");
+    t = t.replace(/追(?!蹤|踪|加|求)/g, "追蹤").replace(/準備好/g, "準備").replace(/完成好/g, "完成");
+    t = t.replace(/(^|，)把(.+?)(更新|完成|整理|修改|處理|準備|寄出|上傳|做|改)(完|好|掉)?(?=$|，)/g, "$1$3$2");
+    let parts = t.split(/[，,]/).map(s => s.trim()).filter(Boolean);
+    if (parts.length === 2 && !VERB_START.test(parts[0]) && VERB_START.test(parts[1]) && parts[0].length <= 12) parts = [parts[1].replace(/(好|完)$/, "") + parts[0]];
+    else if (parts.length === 1) { const m = parts[0].match(/^(.{2,12}?)(要|需)?(準備|完成|提交|更新|整理|寄出|上傳|修改)(好|完)?$/); if (m && !VERB_START.test(m[1])) parts = [m[3] + m[1]]; }
+    if (parts.length > 1 && parts.every(p => p.length <= 16) && parts.slice(1).every(p => VERB_START.test(p))) return parts.join("並");
+    return parts.join("，");
+  }
+  function rewriteConfirm(s, names) {
+    if (isEn(s)) {
+      let t = tidy(s).replace(/^(so|and|ok|okay|well|also)[,\s]+/i, "");
+      t = t.replace(/^[A-Z][a-z]+,\s+/, "").replace(/^(please|can you|could you)\s+/i, "")
+        .replace(/^(we|i|you)?\s*('re|\s+are|\s+am)?\s*(still\s+)?(not sure|unsure)\s+(about\s+)?/i, "")
+        .replace(/^(we|i|you)?\s*(still\s+)?(need to|have to|should|must|will|'ll)?\s*(double[- ]check|confirm|check|verify|clarify|ask|find out)(\s+with)?(\s+the)?\s+([A-Za-z]+)?\s*/i, (all, a, b, c, v, w, th, who) => (w || /ask/i.test(v)) ? "" : (who ? who + " " : ""))
+        .replace(/^(about|on|regarding)\s+/i, "");
+      t = t.replace(/\?$/, "");
+      return cap(tidy(t));
+    }
+    let t = clean(stripPeople(clean(s), names));
+    t = t.replace(/(需要|需|要|必須)?(再)?(跟|和|與|向)\s*([一-鿿]{2,5}?|[A-Za-z]+)\s*(再)?(確認|核對|釐清|討論)/, "確認")
+      .replace(/(需要|需|要)?(再)?[問问](一下|問看)?\s*(客[戶户]|廠商|供[應应]商|採購|主管|老闆|[A-Z][a-zA-Z]+)?/, "")
+      .replace(/^(需要|需|要|再)+/, "")
+      .replace(/要不要/g, "是否").replace(/能不能/g, "能否").replace(/可不可以/g, "可否").replace(/會不會/g, "是否會")
+      .replace(/還不確定|不確定/g, "未定").replace(/還沒決定|還沒定/g, "未決定")
+      .replace(/^(這個|這部分|這件事|這點|這)+/, "").replace(/[？?]$/, "");
+    t = tidy(t).replace(/([\u4e00-\u9fff]{4,})([\u4e00-\u9fff]{2}(未定|未決定))/, "$1，$2");
+    if (/^(確認|再確認|需再確認)?$/.test(t)) return "";
+    return t;
+  }
+  function rewriteDecision(s) {
+    if (isEn(s)) return cap(tidy(tidy(s).replace(/^(so|ok|okay|and)[,\s]+/i, "").replace(/^(we\s+)?(have\s+)?(agreed|decided)( to| that| on)?\s*/i, "").replace(/^(the\s+)?(decision|conclusion)\s+(is|was)\s*(to\s+)?/i, "")));
+    let t = clean(s).replace(/^(那)?(最後)?(結論|決議|決定)(就)?(是|為)?/, "").replace(/^(大家|我們)?(都)?(同意|決定)/, "")
+      .replace(/(這個)?(就)?(這樣|這麼)(決定|定了|定|辦)?(了)?$/, "").replace(/^(就|先就)/, "");
+    return tidy(t);
+  }
+
+  // ================= 議題偵測 =================
+  function topicOf(raw) {
+    let t = tidy(raw), m;
+    const pre = "(?:好的|好|那|好那|嗯|OK|ok|okay)?[\\s，,]*";
+    if ((m = t.match(new RegExp("^" + pre + "(?:首先|第[一二三四五六七八九十\\d]+(?:個|个)?(?:議題|议题|點|项|項|部分)|下一(?:個|个)?(?:議題|议题|主題|主题|部分|項|项)|最後(?:一個)?(?:議題)?|再來|接下來|另外)(?:就)?(?:是|要(?:討論|講|看)|我們(?:來)?(?:討論|講|看)?)?[\\s:：]*(.{2,})$")))) return { title: m[1], rest: "" };
+    if ((m = t.match(new RegExp("^" + pre + "(?:另外就是|另外|再來是|再來|接下來是|接下來|還有就是|還有)?\\s*(.{2,14}?)的(部分|部份|進度|狀況)\\s*(.*)$")))) {
+      const lead = /^(好的|好|那|好那|嗯|OK|ok|okay|另外|再來|接下來|還有)/.test(t);
+      if (lead || !m[3]) return { title: m[1] + (m[2] === "進度" || m[2] === "狀況" ? "的" + m[2] : ""), rest: m[3] };
+    }
+    if ((m = t.match(/^(?:ok|okay|so|and)?[,\s]*(?:regarding|about|moving on to|next (?:topic|item)(?: is)?|let'?s (?:talk about|discuss|move on to|look at|go over))\s*:?\s*(.{3,})$/i))) return { title: m[1].replace(/[.?!]$/, ""), rest: "" };
+    if ((m = t.match(/^(?:first(?:ly)?|second(?:ly)?|third|next|finally|lastly|last)[,:\s]+(?:the\s+|is\s+)*(.{3,})$/i)) && m[1].split(/\s+/).length <= 8 && !/\b(will|is|are|was|were|need|should|have|has)\b/i.test(m[1])) return { title: m[1].replace(/[.?!]$/, ""), rest: "" };
+    if ((m = t.match(/^(?:關於|关于|針對|针对)\s*(.{2,20}?)(?:[，,]\s*(.*))?$/))) return { title: m[1], rest: m[2] || "" };
+    return null;
+  }
+  function cutTitle(t) {
+    t = clean(t).replace(/^(的|是)/, "");
+    const m = t.match(/(目前|現在|上週|預計|主要|因為)/); if (m && m.index >= 2) t = t.slice(0, m.index);
+    t = tidy(t).replace(/^the\s+/i, "");
+    if (isEn(t)) t = cap(t);
+    if (t.length > 40) t = isEn(t) ? t.slice(0, 41).replace(/\s+\S*$/, "") : t.slice(0, 24);
+    return t;
+  }
+
+  // ================= 關鍵詞 =================
+  const EDGE_CN = new Set("的了是在我你他她它們这這那就也都和與与及而但會会有個个嗎吗呢吧啊喔哦嗯欸對对好說说到把被讓让給给很還还再又才去來来看想用做以可要得著着過过沒没請请一".split(""));
+  const STOP_CN = new Set("我們 你們 他們 大家 這個 那個 就是 然後 所以 因為 可是 但是 如果 其實 現在 今天 明天 一下 一個 這邊 那邊 覺得 應該 可能 還是 沒有 知道 什麼 怎麼 這樣 那樣 東西 時候 已經 目前 一些 部分 方面 情況 問題 確認 討論 議題 下週 需要 處理 一起 剛剛 等等 比較 主要 開始 不是 可以 這次 預計 禮拜 下禮拜 星期 負責 回報".split(" "));
+  const STOP_EN = new Set("the a an and or but if then so to of in on at for with from by is are was were be been it its this that these those we you they i he she them us our your their my me do does did have has had will would can could should may might must not no yes ok okay just also very really about into over than as what which who when where why how all any some more most other only now there here going gonna want think know like well right yeah let lets get got make need needs please next first item thing things sure check confirm".split(" "));
+  function keywords(text, k) {
+    const counts = new Map(), add = w => counts.set(w, (counts.get(w) || 0) + 1);
+    (text.match(/[一-鿿]{2,}/g) || []).forEach(run => { for (let n = 2; n <= 4; n++) for (let i = 0; i + n <= run.length; i++) { const g = run.substr(i, n); if (EDGE_CN.has(g[0]) || EDGE_CN.has(g[g.length - 1]) || STOP_CN.has(g)) continue; add(g); } });
+    (text.match(/[A-Za-z][A-Za-z0-9\-]*[A-Za-z0-9]/g) || []).forEach(w => { const acr = /^[A-Z0-9\-]{2,}$/.test(w); const lw = w.toLowerCase(); if (!acr && (lw.length < 3 || STOP_EN.has(lw))) return; add(acr ? w : lw); });
+    let list = [...counts.entries()].filter(([, c]) => c >= 2);
+    list = list.filter(([w, c]) => !list.some(([w2, c2]) => w2 !== w && w2.length > w.length && w2.includes(w) && c2 >= c * 0.7));
+    list.sort((a, b) => b[1] * (1 + .25 * (b[0].length - 2)) - a[1] * (1 + .25 * (a[0].length - 2)));
+    return list.slice(0, k).map(x => x[0]);
+  }
+
+  function mergeFacts(fs) {
+    const out = [];
+    fs.forEach(f => {
+      const p = out[out.length - 1];
+      if (p && p.line === f.line && !f.contrast && !isEn(f.text) && p.text.length + f.text.length <= 40) p.text += "，" + f.text;
+      else out.push({ text: f.text, line: f.line });
+    });
+    return out.map(f => f.text);
+  }
+
+  // ================= 主流程 =================
+  function analyze(text, attendees) {
+    const names = (attendees || []).map(a => a.trim()).filter(Boolean).sort((a, b) => b.length - a.length);
+    const units = splitClauses(text, names);
+
+    // 1) 先找議題起點，把「議題名稱」和後面的內容拆開
+    const items = [];
+    units.forEach(u => {
+      if (u.force === "topic") { items.push({ kind: "topic", title: cutTitle(u.raw), time: u.time, line: u.line }); return; }
+      const tp = u.force ? null : topicOf(u.raw);
+      if (tp && cutTitle(tp.title).length >= 2) {
+        items.push({ kind: "topic", title: cutTitle(tp.title), time: u.time, line: u.line });
+        if (tp.rest && clean(tp.rest).length >= 3) items.push({ raw: tp.rest, time: u.time, line: u.line, subj: cutTitle(tp.title) });
+      } else items.push({ raw: u.raw, time: u.time, line: u.line, force: u.force, speaker: u.speaker });
+    });
+
+    // 2) 逐句分類
+    items.forEach(it => {
+      if (it.kind) return;
+      const s = it.raw.replace(TAIL, "");
+      if (it.force) { it.kind = it.force; return; }
+      if (R.opening.test(s) && clean(s).length < 20) { it.kind = "skip"; return; }
+      let a = 0, c = 0;
+      if (R.explicit.test(s)) a += 3;
+      if (R.self.test(s)) a += 2;
+      if (/([A-Z][a-z]+|[一-鿿]{2,3})\s*(你|妳)(這邊|那邊)?/.test(s) && findOwner(s, names)) a += 2;
+      if (R.verb.test(s)) a += 1;
+      if (R.ask.test(s)) a += 1;
+      const d = findDue(s); if (d) a += /(前|為止|\d|EOD|EOW|end of|day)/i.test(d) ? 2 : 1;
+      if (!(R.done.test(s) && !/(再|還要|需要|要再)/.test(s))) {
+        if (R.confirm.test(s)) c += 2;
+        if (R.decideQ.test(s)) c += 2;
+        else if (R.question.test(s)) c += 1;
+      }
+      if (R.decision.test(s) && !R.decideQ.test(s) && !R.question.test(s)) it.kind = "decision";
+      else if (c >= 2 && c >= a - 1) it.kind = "confirm";
+      else if (a >= 3) it.kind = "action";
+      else it.kind = "fact";
+    });
+
+    // 3) 建立議題、事項
+    const topics = [], actions = [], confirms = [];
+    let cur = null;
+    const who = (s, it) => { const o = findOwner(s, names); return o === "（發言者）" && it.speaker ? it.speaker : o; };
+    const newTopic = (title, time) => { cur = { id: "t" + topics.length, title, time, facts: [], decisions: [] }; topics.push(cur); };
+    let lastConfirm = null;
+    items.forEach((it, i) => {
+      if (it.kind === "skip") return;
+      if (it.kind === "topic") { newTopic(it.title, it.time); lastConfirm = null; return; }
+      if (!cur) newTopic("", it.time);
+      const s = it.raw.replace(TAIL, "");
+      if (it.kind === "decision") {
+        const d = rewriteDecision(s);
+        if (d.length >= 2) cur.decisions.push(d);
+        else if (cur.decisions.length === 0) { // 「這個就這樣決定」→ 前一句才是決議內容
+          const prev = cur.facts.pop(); if (prev) cur.decisions.push(prev.text);
+        }
+        lastConfirm = null; return;
+      }
+      if (it.kind === "action") {
+        const text = rewriteAction(s, names);
+        if (text.length >= 2) actions.push({ text, owner: who(s, it), due: findDue(s), tid: cur.id, time: it.time });
+        lastConfirm = null; return;
+      }
+      if (it.kind === "confirm") {
+        let text = rewriteConfirm(s, names);
+        const owner = who(s, it), withWho = findWith(s), due = findDue(s);
+        // 同一段話裡連續的待確認合併成一項
+        if (lastConfirm && lastConfirm.line === it.line && lastConfirm.tid === cur.id) {
+          if (text && !lastConfirm.text.includes(text)) lastConfirm.text += "；" + text;
+          lastConfirm.owner = lastConfirm.owner || owner; lastConfirm.with = lastConfirm.with || withWho; lastConfirm.due = lastConfirm.due || due;
+          return;
+        }
+        // 「這個要再跟採購確認」→ 內容在前一句
+        if (!text) { const prev = cur.facts.length && cur.facts[cur.facts.length - 1].line === it.line ? cur.facts.pop() : null; text = prev ? prev.text : ""; }
+        if (!text && it.force) text = clean(s);
+        if (!text) return;
+        lastConfirm = { text, owner, due, with: withWho, tid: cur.id, time: it.time, line: it.line };
+        confirms.push(lastConfirm); return;
+      }
+      // fact
+      lastConfirm = null;
+      const t = isEn(s) ? cap(tidy(s.replace(/^(so|and|ok|okay|well|um|uh)[,\s]+/i, ""))) : clean(s);
+      if (t.length < 4) return;
+      const t2 = it.subj && /^(上週|本週|上個月|這個月|目前|現在|是|為|\d)/.test(t) ? it.subj + t : t;
+      cur.facts.push({ text: t2, line: it.line, contrast: /^(但是|不過|可是|but|however)/i.test(tidy(s)) });
+    });
+
+    // 4) 沒偵測到議題標題的，用關鍵詞命名；空議題移除
+    const allText = units.map(u => u.raw).join("\n");
+    topics.forEach((t, i) => {
+      if (!t.title) {
+        const seg = t.facts.map(f => f.text).concat(t.decisions, actions.filter(a => a.tid === t.id).map(a => a.text), confirms.filter(c => c.tid === t.id).map(c => c.text)).join("\n");
+        const k = keywords(seg, 3).length ? keywords(seg, 3) : keywords(allText, 3).filter(w => seg.includes(w));
+        t.title = k.length ? k.slice(0, 3).join("、") + "相關討論" : (topics.length === 1 ? "會議討論事項" : "其他討論");
+      }
+    });
+    const live = topics.filter(t => t.facts.length || t.decisions.length || actions.some(a => a.tid === t.id) || confirms.some(c => c.tid === t.id));
+
+    // 5) 待確認事項：把「向誰確認」併入事項說明
+    confirms.forEach(c => { if (c.with && !c.text.includes(c.with)) c.text += isEn(c.text) ? ` (confirm with ${c.with})` : `（向${c.with}確認）`; delete c.line; });
+
+    const outTopics = live.map(t => ({
+      id: t.id, title: t.title, time: t.time,
+      points: mergeFacts(t.facts).slice(0, 5).concat(t.decisions.map(d => "決議：" + d)),
+      keywords: []
+    }));
+    const nDec = live.reduce((n, t) => n + t.decisions.length, 0);
+    const titles = outTopics.map(t => t.title);
+    const summary = outTopics.length
+      ? `本次會議共討論 ${outTopics.length} 項議題（${titles.join("、")}）${nDec ? `，形成 ${nDec} 項決議` : ""}；後續待處理 ${actions.length} 項、待確認 ${confirms.length} 項。`
+      : "";
+    return { summary, topics: outTopics, actions, confirms, unitCount: units.length };
+  }
+
+  return { analyze, splitClauses, keywords, fmt, clean };
+})();
+if (typeof module !== "undefined") module.exports = MeetingAnalyzer;
+</script>
+
+<!-- ===================== 介面與錄音 ===================== -->
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const KEY="offline-meeting-minutes-v1";
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let state={result:null};
+let stream=null,recorder=null,chunks=[],audioBlob=null,audioExt="webm";
+let startedAt=0,pausedTotal=0,pausedAt=0,tick=null,isRec=false,isPaused=false;
+let rec=null,wantSR=false,srFatal=false,srLocal=false;
+
+// ---------- 暫存 ----------
+function save(){try{localStorage.setItem(KEY,JSON.stringify({title:$("mTitle").value,date:$("mDate").value,att:$("mAttendees").value,place:$("mPlace").value,host:$("mHost").value,writer:$("mWriter").value,lang:$("mLang").value,tr:$("transcript").value,result:state.result,app:$("chkAppendix").checked}))}catch(e){}}
+function load(){try{const d=JSON.parse(localStorage.getItem(KEY)||"null");if(!d)return false;$("mTitle").value=d.title||"";$("mDate").value=d.date||"";$("mAttendees").value=d.att||"";$("mPlace").value=d.place||"";$("mHost").value=d.host||"";$("mWriter").value=d.writer||"";$("mLang").value=d.lang||"zh-TW";$("transcript").value=d.tr||"";$("chkAppendix").checked=!!d.app;state.result=d.result||null;if(state.result&&state.result.summary==null)state.result.summary="";if(state.result)state.result.confirms.forEach(c=>{if(c.owner==null){c.owner="";c.due=c.due||"";c.with=c.who||""}});return true}catch(e){return false}}
+function nowLocal(){const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,16)}
+
+// ---------- 計時 ----------
+function elapsed(){if(!startedAt)return 0;const end=isPaused?pausedAt:Date.now();return (end-startedAt-pausedTotal)/1000}
+function updTimer(){$("timer").textContent=MeetingAnalyzer.fmt(elapsed())}
+
+// ---------- 語音辨識狀態 ----------
+function pill(text,cls){const p=$("srPill");p.textContent=text;p.className="pill "+(cls||"")}
+async function checkSR(){
+  const lang=$("mLang").value;
+  $("btnInstall").style.display="none"; srLocal=false;
+  if(!SR){pill("此瀏覽器不支援","bad");$("srHint").textContent="仍可錄音；逐字稿請用手機內建錄音 App 的離線轉文字（例如 iPhone 語音備忘錄、Android 錄音機），再貼上或匯入。";return}
+  let av="unknown";
+  try{
+    if(typeof SR.available==="function") av=await SR.available({langs:[lang],processLocally:true});
+    else if(typeof SR.availableOnDevice==="function") av=await SR.availableOnDevice(lang);
+  }catch(e){av="unknown"}
+  if(av==="available"){srLocal=true;pill("離線辨識可用 ✓","ok");$("srHint").textContent="已安裝離線語音包，開會時不用網路也能即時轉文字。"}
+  else if(av==="downloadable"||av==="downloading"){pill("可安裝離線語音包","warn");$("btnInstall").style.display="";$("srHint").textContent="趁有網路時按一次「下載離線語音包」，之後就能離線即時轉文字。沒安裝的話，即時轉文字需要網路，但錄音不受影響。"}
+  else if(av==="unavailable"){pill("僅線上辨識","warn");$("srHint").textContent="這個瀏覽器的即時轉文字要連網。離線時照樣能錄音，逐字稿可以用手機內建錄音 App 轉好再貼上。"}
+  else {pill(navigator.onLine?"可用（可能需網路）":"可能無法使用（離線）","warn");$("srHint").textContent="這個瀏覽器不會回報能不能離線辨識。如果即時轉文字沒反應，錄音仍然會繼續。"}
+}
+$("btnInstall").onclick=async()=>{
+  const lang=$("mLang").value;pill("下載中…","warn");
+  try{let ok=false;
+    if(typeof SR.install==="function") ok=await SR.install({langs:[lang],processLocally:true});
+    else if(typeof SR.installOnDevice==="function") ok=await SR.installOnDevice(lang);
+    if(!ok) alert("安裝沒有完成，請確認有網路後再試一次。");
+  }catch(e){alert("安裝失敗："+e.message)}
+  checkSR();
+};
+
+function appendLine(t){
+  t=(t||"").trim(); if(!t) return;
+  const ta=$("transcript");
+  const line="["+MeetingAnalyzer.fmt(elapsed())+"] "+t;
+  ta.value+=(ta.value&&!ta.value.endsWith("\n")?"\n":"")+line+"\n";
+  ta.scrollTop=ta.scrollHeight; save();
+}
+function startSR(){
+  if(!SR||!$("chkSR").checked||srFatal) return;
+  wantSR=true;
+  rec=new SR(); rec.lang=$("mLang").value; rec.continuous=true; rec.interimResults=true;
+  if(srLocal){try{rec.processLocally=true}catch(e){} try{rec.mode="ondevice-only"}catch(e){}}
+  rec.onresult=e=>{let interim="";for(let i=e.resultIndex;i<e.results.length;i++){const r=e.results[i];if(r.isFinal)appendLine(r[0].transcript);else interim+=r[0].transcript}$("interim").textContent=interim?("… "+interim):""};
+  rec.onerror=e=>{
+    if(e.error==="network"){srFatal=true;pill("需網路，已停止轉文字","bad");$("srHint").textContent="目前離線，即時轉文字已停止，但錄音還在繼續。結束後可以按「用剛剛的錄音轉文字」補上逐字稿。"}
+    else if(e.error==="not-allowed"||e.error==="service-not-allowed"){srFatal=true;pill("未授權","bad")}
+    else if(e.error==="language-not-supported"){srFatal=true;pill("不支援此語言","bad")}
+  };
+  rec.onend=()=>{$("interim").textContent="";if(wantSR&&!srFatal&&isRec&&!isPaused)setTimeout(()=>{try{rec.start()}catch(e){}},300)};
+  try{rec.start()}catch(e){}
+}
+function stopSR(){wantSR=false;try{rec&&rec.stop()}catch(e){}}
+
+// ---------- 錄音 ----------
+$("btnRec").onclick=async()=>{
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert("此環境無法使用麥克風。\n電腦：請用 Chrome 或 Edge 直接開啟此檔案。\n手機：請用 Chrome（Android）或 Safari（iPhone）開啟。");return}
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}catch(e){alert("無法取得麥克風權限："+e.message);return}
+  let mime="";
+  for(const m of ["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"]) if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m)){mime=m;break}
+  audioExt=mime.includes("mp4")?"m4a":mime.includes("ogg")?"ogg":"webm";
+  try{recorder=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream)}catch(e){alert("此瀏覽器不支援錄音");return}
+  chunks=[];recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  recorder.onstop=()=>{audioBlob=new Blob(chunks,{type:recorder.mimeType||"audio/webm"});const p=$("player");p.src=URL.createObjectURL(audioBlob);p.style.display="";$("btnDlAudio").disabled=false;$("btnAudioRec").disabled=false;stream.getTracks().forEach(t=>t.stop())};
+  recorder.start(1000);
+  startedAt=Date.now();pausedTotal=0;isRec=true;isPaused=false;srFatal=false;
+  tick=setInterval(updTimer,500);
+  $("dot").classList.add("on");$("btnRec").disabled=true;$("btnPause").disabled=false;$("btnStop").disabled=false;
+  if(!$("mDate").value)$("mDate").value=nowLocal();
+  const ta=$("transcript"); if(ta.value.trim()) ta.value+=(ta.value.endsWith("\n")?"":"\n")+"—— 新錄音段落 ——\n";
+  startSR();keepAwake(true);
+};
+$("btnPause").onclick=()=>{
+  if(!isRec)return;
+  if(!isPaused){isPaused=true;pausedAt=Date.now();try{recorder.pause()}catch(e){}stopSR();$("dot").classList.remove("on");$("btnPause").textContent="▶ 繼續"}
+  else{pausedTotal+=Date.now()-pausedAt;isPaused=false;try{recorder.resume()}catch(e){}startSR();$("dot").classList.add("on");$("btnPause").textContent="❚❚ 暫停"}
+};
+$("btnStop").onclick=()=>{
+  if(!isRec)return; if(isPaused){pausedTotal+=Date.now()-pausedAt;isPaused=false}
+  isRec=false;stopSR();keepAwake(false);try{recorder.stop()}catch(e){}clearInterval(tick);updTimer();
+  $("dot").classList.remove("on");$("btnRec").disabled=false;$("btnPause").disabled=true;$("btnPause").textContent="❚❚ 暫停";$("btnStop").disabled=true;
+  $("btnRec").textContent="● 再錄一段";
+};
+$("btnDlAudio").onclick=()=>{if(audioBlob)download(audioBlob,fileBase()+"_錄音."+audioExt)};
+
+// ---------- 匯入錄音檔 → 本機 Whisper 轉文字 ----------
+const W_VER="3.8.1";
+const W_LIBS=["https://cdn.jsdelivr.net/npm/@huggingface/transformers@"+W_VER+"/dist/","https://fastly.jsdelivr.net/npm/@huggingface/transformers@"+W_VER+"/dist/","https://unpkg.com/@huggingface/transformers@"+W_VER+"/dist/","https://registry.npmmirror.com/@huggingface/transformers/"+W_VER+"/files/dist/"];
+const W_HOSTS=["https://huggingface.co/","https://hf-mirror.com/"];
+const W_WORKER=`
+let T=null,asr=null,key="";
+self.onmessage=async e=>{const d=e.data;
+ try{
+  if(d.type==="load"){
+   if(!T){let err;for(const b of d.libs){try{T=await import(b+"transformers.min.js");try{T.env.backends.onnx.wasm.wasmPaths=b}catch(_){}break}catch(x){err=x}}if(!T)throw new Error("LIB:"+(err&&err.message||err))}
+   if(key!==d.model+d.host){
+    T.env.allowLocalModels=false;T.env.remoteHost=d.host;
+    let cacheOk=false;try{cacheOk=typeof caches!=="undefined"&&!!(await caches.open("transformers-cache"))}catch(_){}
+    T.env.useBrowserCache=cacheOk;
+    const cb=p=>self.postMessage({type:"progress",p});
+    let dev=d.webgpu?"webgpu":"wasm";
+    try{asr=await T.pipeline("automatic-speech-recognition",d.model,{progress_callback:cb,device:dev,dtype:dev==="webgpu"?{encoder_model:"fp32",decoder_model_merged:"q4"}:"q8"})}
+    catch(x){if(dev!=="webgpu")throw x;dev="wasm";asr=await T.pipeline("automatic-speech-recognition",d.model,{progress_callback:cb,device:"wasm",dtype:"q8"})}
+    key=d.model+d.host;self.postMessage({type:"ready",device:dev,cache:cacheOk});
+   }else self.postMessage({type:"ready"});
+  }
+  if(d.type==="run"){
+   const o=await asr(d.audio,{language:d.language,task:"transcribe",return_timestamps:true,chunk_length_s:30,stride_length_s:5});
+   self.postMessage({type:"result",id:d.id,chunks:(o.chunks&&o.chunks.length)?o.chunks:[{timestamp:[0,null],text:o.text||""}]});
+  }
+ }catch(x){self.postMessage({type:"error",message:String(x&&x.message||x)})}
+};`;
+let wWorker=null,wBusy=false,wCancel=false;
+function wStatus(t,cls){const el=$("wStatus");el.textContent=t;el.style.color=cls==="bad"?"var(--red)":cls==="ok"?"var(--green)":""}
+function wProg(v){const p=$("wProg");if(v==null){p.style.display="none";return}p.style.display="";p.value=v}
+function wCall(msg,transfer){return new Promise((res,rej)=>{
+  wWorker.onmessage=e=>{const d=e.data;
+    if(d.type==="progress"){const p=d.p||{};if(p.status==="progress"&&p.total){wStatus("下載語音模型中… "+(p.file||"").split("/").pop()+"　"+Math.round(p.loaded/1048576)+" / "+Math.round(p.total/1048576)+" MB");wProg(p.progress||0)}return}
+    if(d.type==="error")rej(new Error(d.message));else res(d)};
+  wWorker.onerror=e=>rej(new Error(e.message||"worker error"));
+  wWorker.postMessage(msg,transfer||[]);
+})}
+async function wPickHost(model){
+  let saved="";try{saved=localStorage.getItem("wHost:"+model)||""}catch(e){}
+  if(saved)return saved;
+  for(const hst of W_HOSTS){
+    try{const ac=new AbortController();const tm=setTimeout(()=>ac.abort(),7000);
+      const r=await fetch(hst+model+"/resolve/main/config.json",{signal:ac.signal,cache:"no-store"});clearTimeout(tm);
+      if(r.ok)return hst}catch(e){}
+  }
+  return "";
+}
+async function decodeAudio(blob){
+  const AC=window.AudioContext||window.webkitAudioContext;
+  if(!AC)throw new Error("此瀏覽器不支援音訊解碼");
+  const buf=await blob.arrayBuffer();
+  const ac=new AC({sampleRate:16000});
+  let ab;
+  try{ab=await new Promise((res,rej)=>{const pr=ac.decodeAudioData(buf,res,rej);if(pr&&pr.then)pr.then(res,rej)})}
+  finally{try{ac.close()}catch(e){}}
+  let ch=ab.getChannelData(0);
+  if(ab.numberOfChannels>1){const c1=ab.getChannelData(1),m=new Float32Array(ch.length);for(let i=0;i<ch.length;i++)m[i]=(ch[i]+c1[i])/2;ch=m}else ch=new Float32Array(ch);
+  if(ab.sampleRate!==16000){const ratio=ab.sampleRate/16000,n=Math.floor(ch.length/ratio),o=new Float32Array(n);for(let i=0;i<n;i++)o[i]=ch[Math.floor(i*ratio)];ch=o}
+  // 音量正規化：收音太小聲時自動放大
+  let peak=0;for(let i=0;i<ch.length;i+=7){const v=Math.abs(ch[i]);if(v>peak)peak=v}
+  if(peak>0.001&&peak<0.6){const g=Math.min(0.9/peak,30);for(let i=0;i<ch.length;i++)ch[i]*=g}
+  return ch;
+}
+function quietCut(a,target,win){ // 在目標點前 3 秒內找最安靜的位置下刀，避免切到字
+  if(target>=a.length)return a.length;
+  let best=target,bestE=Infinity;const w=3200;
+  for(let p=Math.max(w,target-win);p<=target;p+=1600){let e=0;for(let i=p-w;i<p;i+=16)e+=a[i]*a[i];if(e<bestE){bestE=e;best=p}}
+  return best;
+}
+async function transcribeBlob(blob,name){
+  if(wBusy)return;
+  if(isRec){alert("請先結束錄音");return}
+  wBusy=true;wCancel=false;$("btnAudioIn").disabled=true;$("btnAudioRec").disabled=true;$("btnAudioCancel").style.display="";
+  const model=$("wModel").value;
+  try{
+    wStatus("讀取錄音檔…");wProg(0);
+    const audio=await decodeAudio(blob);
+    const dur=audio.length/16000;
+    if(dur<1)throw new Error("錄音檔太短或無法讀取");
+    wStatus("準備語音模型…（第一次需要連網下載）");
+    const host=await wPickHost(model);
+    if(!wWorker)wWorker=new Worker(URL.createObjectURL(new Blob([W_WORKER],{type:"text/javascript"})),{type:"module"});
+    const rd=await wCall({type:"load",model,host:host||W_HOSTS[0],libs:W_LIBS,webgpu:!!navigator.gpu&&!/iPhone|iPad|Android/i.test(navigator.userAgent)});
+    try{localStorage.setItem("wHost:"+model,host||W_HOSTS[0])}catch(e){}
+    const lang=$("mLang").value==="en-US"?"english":"chinese";
+    const SEG=60*16000;let pos=0,n=0;const t0=Date.now();
+    const ta=$("transcript");
+    ta.value+=(ta.value&&!ta.value.endsWith("\n")?"\n":"")+"—— 錄音檔："+(name||"錄音")+"（"+MeetingAnalyzer.fmt(dur)+"）——\n";
+    while(pos<audio.length){
+      if(wCancel)throw new Error("CANCEL");
+      const end=quietCut(audio,Math.min(pos+SEG,audio.length),3*16000);
+      const seg=audio.slice(pos,end);
+      const el=(Date.now()-t0)/1000,done=pos/audio.length;
+      wStatus("轉文字中… "+MeetingAnalyzer.fmt(pos/16000)+" / "+MeetingAnalyzer.fmt(dur)+(done>0.03?"　預估還要 "+MeetingAnalyzer.fmt(el/done*(1-done)):""));wProg(done*100);
+      const r=await wCall({type:"run",id:n++,audio:seg,language:lang},[seg.buffer]);
+      const off=pos/16000;
+      r.chunks.forEach(c=>{const t=(c.text||"").trim();if(!t||/^[\s.。,，!?！？\-—…]*$/.test(t))return;
+        const st=off+((c.timestamp&&c.timestamp[0])||0);ta.value+="["+MeetingAnalyzer.fmt(st)+"] "+t+"\n"});
+      ta.scrollTop=ta.scrollHeight;save();
+      pos=end;
+    }
+    wProg(100);wStatus("✓ 轉文字完成（"+MeetingAnalyzer.fmt(dur)+" 的錄音，花了 "+MeetingAnalyzer.fmt((Date.now()-t0)/1000)+"）。請檢查逐字稿後按「產生會議記錄」。"+(rd.cache===false?"　※ 目前是直接開檔案，模型不會保存，下次要重新下載；放在網址上使用才會保存。":""),"ok");
+  }catch(e){
+    const m=String(e.message||e);
+    if(m==="CANCEL"){wStatus("已取消。已轉好的部分保留在逐字稿裡。");if(wWorker){wWorker.terminate();wWorker=null}}
+    else if(/^LIB:/.test(m)||/Failed to fetch|NetworkError|Load failed|fetch/i.test(m))wStatus("無法下載語音模型。第一次使用要連網（大陸網路可能要翻牆或換網路）；下載過一次之後就能離線使用。詳細訊息："+m,"bad");
+    else if(/decod|EncodingError|Unable to decode/i.test(m))wStatus("這個錄音檔的格式無法讀取，請改用 m4a、mp3 或 wav。","bad");
+    else if(/memory|allocation|out of/i.test(m))wStatus("記憶體不足。請改選「快速」模型，或把錄音檔拿到電腦上轉。","bad");
+    else wStatus("轉文字失敗："+m,"bad");
+    if(m!=="CANCEL"&&wWorker){wWorker.terminate();wWorker=null}
+  }finally{
+    wBusy=false;$("btnAudioIn").disabled=false;$("btnAudioRec").disabled=!audioBlob;$("btnAudioCancel").style.display="none";setTimeout(()=>wProg(null),1500);
+  }
+}
+$("btnAudioIn").onclick=()=>$("audioIn").click();
+$("audioIn").onchange=e=>{const f=e.target.files[0];e.target.value="";if(f)transcribeBlob(f,f.name)};
+$("btnAudioRec").onclick=()=>{if(audioBlob)transcribeBlob(audioBlob,"剛剛的錄音")};
+$("btnAudioCancel").onclick=()=>{wCancel=true;wStatus("取消中…")};
+try{const m=localStorage.getItem("wModel");if(m)$("wModel").value=m;else if(/iPhone|iPad|Android/i.test(navigator.userAgent))$("wModel").value="onnx-community/whisper-base"}catch(e){}
+$("wModel").onchange=()=>{try{localStorage.setItem("wModel",$("wModel").value)}catch(e){}};
+
+// ---------- 匯入 ----------
+$("btnImport").onclick=()=>$("fileIn").click();
+$("fileIn").onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{let t=String(rd.result);
+    if(/\.(srt|vtt)$/i.test(f.name)||/-->/.test(t)) t=parseSubs(t);
+    const ta=$("transcript");ta.value+=(ta.value&&!ta.value.endsWith("\n")?"\n":"")+t.trim()+"\n";save()};
+  rd.readAsText(f,"utf-8");e.target.value="";
+};
+function parseSubs(t){
+  const out=[];let cur=null;
+  t.replace(/\r/g,"").split("\n").forEach(l=>{
+    const m=l.match(/(\d{1,2}):(\d{2}):(\d{2})[,.]\d+\s*-->/)||l.match(/^(\d{1,2}):(\d{2})[,.]\d+\s*-->/);
+    if(m){const sec=m.length===4?(+m[1])*3600+(+m[2])*60+(+m[3]):(+m[1])*60+(+m[2]);cur={t:MeetingAnalyzer.fmt(sec),x:[]};out.push(cur);return}
+    if(/^WEBVTT|^\d+$|^NOTE/.test(l.trim())||!l.trim())return;
+    if(cur)cur.x.push(l.replace(/<[^>]+>/g,"").trim());
+  });
+  return out.filter(c=>c.x.length).map(c=>"["+c.t+"] "+c.x.join(" ")).join("\n");
+}
+$("btnClearT").onclick=()=>{if(confirm("確定清除逐字稿？")){$("transcript").value="";save()}};
+$("btnSample").onclick=()=>{
+  if($("transcript").value.trim()&&!confirm("要用範例取代目前的逐字稿嗎？"))return;
+  $("mTitle").value=$("mTitle").value||"自動化產線專案週會";
+  $("mAttendees").value=$("mAttendees").value||"小王, Kevin, Amy";$("mPlace").value=$("mPlace").value||"B棟 3F 會議室";$("mHost").value=$("mHost").value||"Ming";$("mWriter").value=$("mWriter").value||"Ming";
+  if(!$("mDate").value)$("mDate").value=nowLocal();
+  $("transcript").value=`[00:05] 好，我們開始今天的專案週會，第一個議題是自動化產線的導入進度。
+[00:18] 目前 Line 3 的設備已經進廠，預計下週完成安裝。
+[00:32] 治具的部分廠商說交期可能會延後，這個要再跟採購確認一下。
+[00:45] 小王負責追蹤治具交期，週三前回報。
+[01:02] OK, regarding the training plan for the overseas team.
+[01:10] Kevin will prepare the training materials by Friday.
+[01:22] We need to confirm with the customer whether the SOP should be in English only.
+[01:40] 大家同意先用中英雙語版本，這個就這樣決定。
+[01:55] 下一個議題是良率改善。
+[02:05] 上週良率是 96.5%，主要不良是螺絲漏打，佔不良的六成。
+[02:20] 請 Amy 整理不良分析報告，下週一前寄給大家。
+[02:35] 防呆治具要不要加感測器？成本還不確定，需要 Kevin 跟供應商確認報價。
+[02:50] 結論是先做小批量驗證，驗證結果下次會議報告。
+`;save();
+};
+
+// ---------- 分析與編輯 ----------
+function attendees(){return $("mAttendees").value.split(/[,，、;；\s]+/).map(s=>s.trim()).filter(Boolean)}
+$("btnAnalyze").onclick=()=>{
+  const t=$("transcript").value.trim();
+  if(!t){alert("逐字稿是空的。請先錄音、匯入，或按「載入範例」試試看。");return}
+  state.result=MeetingAnalyzer.analyze(t,attendees());
+  render();save();
+  $("resultArea").scrollIntoView({behavior:"smooth",block:"start"});
+};
+function h(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function render(){
+  const r=state.result,el=$("resultArea");
+  if(!r){el.innerHTML='<div class="empty">尚未產生。先錄音或貼上逐字稿，再按「產生會議記錄」。</div>';refreshMd();return}
+  let html=`<div class="section"><h3>會議摘要</h3><textarea id="mSummary" data-k="summary" placeholder="會議摘要">${h(r.summary||"")}</textarea></div><div class="section"><h3>一、討論議題（${r.topics.length}）<button class="sm" data-add="topic">＋ 新增議題</button></h3>`;
+  if(!r.topics.length) html+='<div class="empty">沒有偵測到議題</div>';
+  r.topics.forEach((t,i)=>{html+=`<div class="topic"><div class="row"><b style="color:var(--muted)">${i+1}.</b><input data-k="topics.${i}.title" value="${h(t.title)}" placeholder="議題名稱">${t.time?`<span class="tl">${h(t.time)}</span>`:""}<button class="x" data-del="topics.${i}">✕</button></div><textarea data-k="topics.${i}.points" placeholder="重點／決議（一行一點）">${h((t.points||[]).join("\n"))}</textarea>${t.keywords&&t.keywords.length?`<div class="kw">關鍵詞：${h(t.keywords.join("、"))}</div>`:""}</div>`});
+  const tbl=(list,label)=>{const arr=r[list];
+    return `</div><div class="section"><h3>${label}（${arr.length}）<button class="sm" data-add="${list}">＋ 新增</button></h3>`+
+    (arr.length?`<table><thead><tr><th></th><th>事項</th><th style="width:20%">DRI</th><th style="width:18%">CP</th><th style="width:30px"></th></tr></thead><tbody>`+arr.map((a,i)=>`<tr><td class="n">${i+1}</td><td><input data-k="${list}.${i}.text" value="${h(a.text)}"></td><td><input data-k="${list}.${i}.owner" value="${h(a.owner)}" placeholder="DRI"></td><td><input data-k="${list}.${i}.due" value="${h(a.due)}" placeholder="CP"></td><td><button class="x" data-del="${list}.${i}">✕</button></td></tr>`).join("")+"</tbody></table>":'<div class="empty">沒有偵測到項目</div>');};
+  html+=tbl("actions","二、待處理事項")+tbl("confirms","三、待確認事項");
+  html+="</div>";
+  el.innerHTML=html;refreshMd();
+}
+$("resultArea").addEventListener("input",e=>{
+  const k=e.target.dataset.k;if(!k||!state.result)return;
+  if(k==="summary"){state.result.summary=e.target.value;refreshMd();save();return}
+  const [list,i,f]=k.split(".");
+  state.result[list][+i][f]=f==="points"?e.target.value.split("\n").map(s=>s.trim()).filter(Boolean):e.target.value;
+  refreshMd();save();
+});
+$("resultArea").addEventListener("click",e=>{
+  const r=state.result;if(!r)return;
+  const del=e.target.dataset.del,add=e.target.dataset.add;
+  if(del){const [list,i]=del.split(".");r[list].splice(+i,1);render();save()}
+  if(add==="topic"){r.topics.push({id:"n"+Date.now(),title:"",points:[],keywords:[]});render();save()}
+  if(add==="actions"||add==="confirms"){r[add].push({text:"",owner:"",due:""});render();save()}
+});
+
+// ---------- 匯出 ----------
+function meta(){
+  const d=$("mDate").value?$("mDate").value.replace("T"," "):"";
+  return {title:$("mTitle").value.trim()||"會議記錄",date:d,att:attendees().join("、"),place:$("mPlace").value.trim(),host:$("mHost").value.trim(),writer:$("mWriter").value.trim()};
+}
+function fileBase(){const m=meta();return (m.title+"_"+(m.date||nowLocal()).slice(0,10)).replace(/[\\/:*?"<>|\s]+/g,"_")}
+function related(t){
+  const r=state.result;if(!t.id)return "";
+  const a=r.actions.map((x,i)=>x.tid===t.id?"#"+(i+1):"").filter(Boolean),c=r.confirms.map((x,i)=>x.tid===t.id?"#"+(i+1):"").filter(Boolean);
+  return [a.length?"待處理 "+a.join("、"):"",c.length?"待確認 "+c.join("、"):""].filter(Boolean).join("｜");
+}
+function buildMd(){
+  const r=state.result,m=meta();if(!r)return "";
+  let s=`# ${m.title}\n\n`;
+  if(m.date)s+=`- 日期：${m.date}\n`;
+  if(m.place)s+=`- 地點：${m.place}\n`;
+  if(m.host)s+=`- 主持人：${m.host}\n`;
+  if(m.writer)s+=`- 記錄人：${m.writer}\n`;
+  if(m.att)s+=`- 與會者：${m.att}\n`;
+  if(r.summary)s+=`\n## 會議摘要\n\n${r.summary}\n`;
+  s+=`\n## 一、討論議題\n\n`;
+  r.topics.forEach((t,i)=>{s+=`### ${i+1}. ${t.title||"（未命名議題）"}\n`;(t.points||[]).forEach(p=>s+=`- ${p}\n`);const rel=related(t);if(rel)s+=`- 相關事項：${rel}\n`;s+="\n"});
+  if(!r.topics.length)s+="（無）\n\n";
+  s+=`## 二、待處理事項\n\n`;
+  if(r.actions.length){s+="| # | 事項 | DRI | CP |\n|---|---|---|---|\n";r.actions.forEach((a,i)=>s+=`| ${i+1} | ${(a.text||"").replace(/\|/g,"/")} | ${a.owner||""} | ${a.due||""} |\n`)}else s+="（無）\n";
+  s+=`\n## 三、待確認事項\n\n`;
+  if(r.confirms.length){s+="| # | 事項 | DRI | CP |\n|---|---|---|---|\n";r.confirms.forEach((c,i)=>s+=`| ${i+1} | ${(c.text||"").replace(/\|/g,"/")} | ${c.owner||""} | ${c.due||""} |\n`)}else s+="（無）\n";
+  if($("chkAppendix").checked&&$("transcript").value.trim())s+=`\n## 附錄：逐字稿\n\n${$("transcript").value.trim()}\n`;
+  return s;
+}
+function buildHtml(){
+  const r=state.result,m=meta();if(!r)return "";
+  const NAVY="#1F3864",ACC="#2F5597",LIGHT="#EAF0FA",LINE="#C9D3E3",ZEBRA="#F6F8FC",GREEN="#E6F4EA",GTXT="#1E6B3A",AMBER="#FFF4E0";
+  const F="font-family:'Microsoft JhengHei','微軟正黑體','PingFang TC',sans-serif;";
+  const cell=(c,extra="")=>`style="${F}border:1px solid ${LINE};padding:7px 10px;font-size:10.5pt;vertical-align:top;${extra}"`;
+  const sec=(no,t,n)=>`<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin:22px 0 10px"><tr><td bgcolor="${LIGHT}" style="${F}background:${LIGHT};border-left:6px solid ${ACC};padding:7px 12px;font-size:13pt;font-weight:bold;color:${NAVY}">${no}、${t}<span style="font-size:10pt;font-weight:normal;color:#5B6B85">　共 ${n} 項</span></td></tr></table>`;
+  const info=[["會議日期",m.date],["會議地點",m.place],["主持人",m.host],["記錄人",m.writer]].filter(x=>x[1]);
+  let rows="";
+  for(let i=0;i<info.length;i+=2){const a=info[i],b=info[i+1];
+    rows+=`<tr><td ${cell(0,`background:${LIGHT};color:${NAVY};font-weight:bold;width:14%`)} bgcolor="${LIGHT}">${a[0]}</td><td ${cell(0,b?"width:36%":"")} ${b?"":'colspan="3"'}>${h(a[1])}</td>${b?`<td ${cell(0,`background:${LIGHT};color:${NAVY};font-weight:bold;width:14%`)} bgcolor="${LIGHT}">${b[0]}</td><td ${cell(0,"width:36%")}>${h(b[1])}</td>`:""}</tr>`}
+  if(m.att)rows+=`<tr><td ${cell(0,`background:${LIGHT};color:${NAVY};font-weight:bold`)} bgcolor="${LIGHT}">與會人員</td><td ${cell(0)} colspan="3">${h(m.att)}</td></tr>`;
+  let s=`<div style="${F}color:#222">`;
+  s+=`<table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse"><tr><td bgcolor="${NAVY}" style="${F}background:${NAVY};padding:18px 22px;color:#fff;border-bottom:5px solid ${ACC}"><div style="font-size:9pt;letter-spacing:3px;color:#BFD0EE">MEETING MINUTES</div><div style="font-size:20pt;font-weight:bold;color:#fff;margin-top:4px">${h(m.title)}</div></td></tr></table>`;
+  if(rows)s+=`<table width="100%" cellspacing="0" style="border-collapse:collapse;margin-top:14px">${rows}</table>`;
+  // 摘要
+  const box=(n,t,c)=>`<td width="33%" bgcolor="${c}" style="${F}background:${c};text-align:center;padding:10px;border:3px solid #fff"><div style="font-size:18pt;font-weight:bold;color:${NAVY}">${n}</div><div style="font-size:9.5pt;color:#5B6B85">${t}</div></td>`;
+  s+=`<table width="100%" cellspacing="0" style="border-collapse:collapse;margin-top:12px"><tr>${box(r.topics.length,"討論議題",LIGHT)}${box(r.actions.length,"待處理事項",GREEN)}${box(r.confirms.length,"待確認事項",AMBER)}</tr></table>`;
+  if(r.summary)s+=`<table width="100%" cellspacing="0" style="border-collapse:collapse;margin-top:12px"><tr><td style="${F}border:1px solid ${LINE};border-left:6px solid ${NAVY};padding:10px 14px;font-size:10.5pt;line-height:1.75"><b style="color:${NAVY}">會議摘要</b><br>${h(r.summary)}</td></tr></table>`;
+  // 議題
+  s+=sec("一","討論議題",r.topics.length);
+  if(!r.topics.length)s+=`<p style="${F}color:#888">（無）</p>`;
+  r.topics.forEach((t,i)=>{
+    const pts=(t.points||[]).filter(p=>!/^決議[:：]/.test(p)),dec=(t.points||[]).filter(p=>/^決議[:：]/.test(p)).map(p=>p.replace(/^決議[:：]\s*/,""));
+    s+=`<table width="100%" cellspacing="0" style="border-collapse:collapse;margin:10px 0 4px"><tr><td style="${F}padding:5px 0;font-size:12pt;font-weight:bold;color:${NAVY};border-bottom:1.5px solid ${ACC}"><span style="background:${ACC};color:#fff;padding:2px 9px;margin-right:8px">&nbsp;${i+1}&nbsp;</span>　${h(t.title||"（未命名議題）")}</td></tr></table>`;
+    if(pts.length)s+=`<ul style="${F}margin:6px 0 6px 18px;padding-left:18px;font-size:10.5pt;line-height:1.75">${pts.map(p=>`<li>${h(p)}</li>`).join("")}</ul>`;
+    const rel=related(t);
+    dec.forEach(d=>s+=`<table width="100%" cellspacing="0" style="border-collapse:collapse;margin:4px 0 6px"><tr><td bgcolor="${GREEN}" style="${F}background:${GREEN};border-left:4px solid ${GTXT};padding:6px 12px;font-size:10.5pt;color:${GTXT}"><b>✔ 決議</b>　${h(d)}</td></tr></table>`);
+    if(rel)s+=`<p style="${F}margin:2px 0 8px 4px;font-size:9.5pt;color:#5B6B85">▸ 相關事項：${h(rel)}</p>`;
+  });
+  const table=(arr)=>arr.length?`<table width="100%" cellspacing="0" style="border-collapse:collapse;margin-top:4px;table-layout:fixed"><colgroup><col width="50"><col width="420"><col width="100"><col width="90"></colgroup><tr>${[["#","50"],["事項","420"],["DRI","100"],["CP","90"]].map(x=>`<th width="${x[1]}" bgcolor="${NAVY}" ${cell(0,`background:${NAVY};color:#fff;font-weight:bold;text-align:${x[0]==="事項"?"left":"center"};border-color:${NAVY};width:${x[1]}px`)}>${x[0]}</th>`).join("")}</tr>${arr.map((a,i)=>{const bg=i%2?ZEBRA:"#FFFFFF";return `<tr><td bgcolor="${bg}" ${cell(0,`background:${bg};text-align:center;color:#5B6B85`)}>${i+1}</td><td bgcolor="${bg}" ${cell(0,`background:${bg}`)}>${h(a.text)}</td><td bgcolor="${bg}" ${cell(0,`background:${bg};text-align:center;font-weight:bold;color:${NAVY}`)}>${h(a.owner)||'<span style="color:#C0392B">待指派</span>'}</td><td bgcolor="${bg}" ${cell(0,`background:${bg};text-align:center;color:#B03A2E`)}>${h(a.due)||'<span style="color:#999">—</span>'}</td></tr>`}).join("")}</table>`:`<p style="${F}color:#888">（無）</p>`;
+  s+=sec("二","待處理事項",r.actions.length)+table(r.actions);
+  s+=sec("三","待確認事項",r.confirms.length)+table(r.confirms);
+  if($("chkAppendix").checked&&$("transcript").value.trim())s+=sec("附","錄　逐字稿","—").replace("　共 — 項","")+`<div style="${F}font-size:9.5pt;color:#444;white-space:pre-wrap;line-height:1.6;border:1px solid ${LINE};padding:10px">${h($("transcript").value.trim())}</div>`;
+  s+=`<p style="${F}text-align:center;color:#8A96AB;font-size:9pt;margin-top:26px;border-top:1px solid ${LINE};padding-top:8px">— 以上 —　｜　DRI：Directly Responsible Individual 負責人　｜　CP：Check Point 期限／檢查點</p></div>`;
+  return s;
+}
+function refreshMd(){$("mdOut").value=buildMd()}
+function need(){if(!state.result){alert("請先按「產生會議記錄」");return false}return true}
+function download(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)}
+$("btnMd").onclick=()=>{if(need())download(new Blob([buildMd()],{type:"text/markdown;charset=utf-8"}),fileBase()+".md")};
+$("btnDoc").onclick=()=>{if(!need())return;const doc=`<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><style>@page WordSection1{size:595.3pt 841.9pt;margin:50pt 50pt 50pt 50pt}div.WordSection1{page:WordSection1}body{font-family:"Microsoft JhengHei","PingFang TC",sans-serif;font-size:10.5pt}</style></head><body><div class="WordSection1">${buildHtml()}</div></body></html>`;download(new Blob(["﻿",doc],{type:"application/msword"}),fileBase()+".doc")};
+$("btnPrint").onclick=()=>{if(!need())return;$("printArea").innerHTML=buildHtml();window.print()};
+$("btnCopy").onclick=async()=>{if(!need())return;const t=buildMd();try{await navigator.clipboard.writeText(t);flash("已複製")}catch(e){const ta=$("mdOut");ta.focus();ta.select();try{document.execCommand("copy");flash("已複製")}catch(e2){alert("請手動選取下方文字複製")}}};
+function flash(t){const b=$("btnCopy"),o=b.textContent;b.textContent="✓ "+t;setTimeout(()=>b.textContent=o,1500)}
+$("chkAppendix").onchange=()=>{refreshMd();save()};
+$("btnReset").onclick=()=>{if(!confirm("清除會議資訊、逐字稿和會議記錄，開始新的會議？"))return;["mTitle","mAttendees","mPlace","mHost","mWriter","transcript"].forEach(i=>$(i).value="");$("mDate").value=nowLocal();state.result=null;render();save()};
+["mTitle","mDate","mAttendees","mPlace","mHost","mWriter","transcript"].forEach(i=>$(i).addEventListener("input",()=>{save();if(state.result&&i!=="transcript")refreshMd()}));
+$("mLang").onchange=()=>{save();checkSR()};
+
+// ---------- 手機：錄音時保持螢幕常亮 ----------
+let wakeLock=null;
+async function keepAwake(on){try{if(on&&"wakeLock" in navigator){wakeLock=await navigator.wakeLock.request("screen")}else if(!on&&wakeLock){await wakeLock.release();wakeLock=null}}catch(e){}}
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&isRec&&!isPaused)keepAwake(true)});
+if(/iPhone|iPad|Android/i.test(navigator.userAgent))$("mobileHint").style.display="";
+// ---------- 離線快取（放在網址上時才啟用） ----------
+if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register("sw.js").catch(()=>{})}
+function netState(){$("netState").textContent=navigator.onLine?"":"｜目前離線"}
+window.addEventListener("online",netState);window.addEventListener("offline",netState);netState();
+
+// ---------- 啟動 ----------
+if(!load())$("mDate").value=nowLocal();
+render();checkSR();
+window.addEventListener("beforeunload",e=>{if(isRec){e.preventDefault();e.returnValue=""}});
+})();
+</script>
+</body>
+</html>

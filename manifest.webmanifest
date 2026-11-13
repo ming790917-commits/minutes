@@ -1,0 +1,14 @@
+{
+  "name": "離線會議記錄生成器",
+  "short_name": "會議記錄",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#1F3864",
+  "lang": "zh-Hant",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
