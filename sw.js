@@ -1,5 +1,5 @@
 // 離線快取：有網路時抓最新版，沒網路時用上次存下的版本
-const CACHE = "minutes-v2";
+const CACHE = "minutes-v3";
 const LIB_CACHE = "minutes-lib-v1";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 

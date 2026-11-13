@@ -115,6 +115,8 @@ audio{width:100%;margin-top:6px}
     <button id="btnPause" disabled>❚❚ 暫停</button>
     <button id="btnStop" disabled>■ 結束</button>
     <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:14px;color:var(--ink)"><input type="checkbox" id="chkSR" checked style="width:auto"> 同步即時轉文字</label>
+    <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:14px;color:var(--ink)"><input type="checkbox" id="chkAuto" style="width:auto"> 結束後自動轉文字</label>
+    <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:14px;color:var(--ink)"><input type="checkbox" id="chkFar" checked style="width:auto"> 會議室收音（多人、距離遠）</label>
   </div>
   <div class="status">
     <span class="dot" id="dot"></span><span class="timer" id="timer">00:00</span>
@@ -538,7 +540,7 @@ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 let state={result:null};
 let stream=null,recorder=null,chunks=[],audioBlob=null,audioExt="webm";
 let startedAt=0,pausedTotal=0,pausedAt=0,tick=null,isRec=false,isPaused=false;
-let rec=null,wantSR=false,srFatal=false,srLocal=false;
+let rec=null,wantSR=false,srFatal=false,srLocal=false,srLines=0;
 
 // ---------- 暫存 ----------
 function save(){try{localStorage.setItem(KEY,JSON.stringify({title:$("mTitle").value,date:$("mDate").value,att:$("mAttendees").value,place:$("mPlace").value,host:$("mHost").value,writer:$("mWriter").value,lang:$("mLang").value,tr:$("transcript").value,result:state.result,app:$("chkAppendix").checked}))}catch(e){}}
@@ -578,6 +580,7 @@ $("btnInstall").onclick=async()=>{
 function appendLine(t){
   t=(t||"").trim(); if(!t) return;
   const ta=$("transcript");
+  srLines++;
   const line="["+MeetingAnalyzer.fmt(elapsed())+"] "+t;
   ta.value+=(ta.value&&!ta.value.endsWith("\n")?"\n":"")+line+"\n";
   ta.scrollTop=ta.scrollHeight; save();
@@ -601,15 +604,19 @@ function stopSR(){wantSR=false;try{rec&&rec.stop()}catch(e){}}
 // ---------- 錄音 ----------
 $("btnRec").onclick=async()=>{
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){alert("此環境無法使用麥克風。\n電腦：請用 Chrome 或 Edge 直接開啟此檔案。\n手機：請用 Chrome（Android）或 Safari（iPhone）開啟。");return}
-  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}})}catch(e){alert("無法取得麥克風權限："+e.message);return}
+  const far=$("chkFar").checked;
+  // 會議室收音：關閉通話用的降噪與回音消除，避免把距離遠的人聲當成雜音濾掉
+  const cons=far?{echoCancellation:false,noiseSuppression:false,autoGainControl:true,channelCount:1}:{echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:cons})}
+  catch(e1){try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){alert("無法取得麥克風權限："+e.message);return}}
   let mime="";
   for(const m of ["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"]) if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(m)){mime=m;break}
   audioExt=mime.includes("mp4")?"m4a":mime.includes("ogg")?"ogg":"webm";
-  try{recorder=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream)}catch(e){alert("此瀏覽器不支援錄音");return}
+  try{recorder=mime?new MediaRecorder(stream,{mimeType:mime,audioBitsPerSecond:96000}):new MediaRecorder(stream)}catch(e0){try{recorder=new MediaRecorder(stream)}catch(e){alert("此瀏覽器不支援錄音");return}}
   chunks=[];recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
-  recorder.onstop=()=>{audioBlob=new Blob(chunks,{type:recorder.mimeType||"audio/webm"});const p=$("player");p.src=URL.createObjectURL(audioBlob);p.style.display="";$("btnDlAudio").disabled=false;$("btnAudioRec").disabled=false;stream.getTracks().forEach(t=>t.stop())};
+  recorder.onstop=()=>{audioBlob=new Blob(chunks,{type:recorder.mimeType||"audio/webm"});const p=$("player");p.src=URL.createObjectURL(audioBlob);p.style.display="";$("btnDlAudio").disabled=false;$("btnAudioRec").disabled=false;if($("chkAuto").checked&&srLines===0)setTimeout(()=>transcribeBlob(audioBlob,"剛剛的錄音"),300);stream.getTracks().forEach(t=>t.stop())};
   recorder.start(1000);
-  startedAt=Date.now();pausedTotal=0;isRec=true;isPaused=false;srFatal=false;
+  startedAt=Date.now();pausedTotal=0;srLines=0;isRec=true;isPaused=false;srFatal=false;
   tick=setInterval(updTimer,500);
   $("dot").classList.add("on");$("btnRec").disabled=true;$("btnPause").disabled=false;$("btnStop").disabled=false;
   if(!$("mDate").value)$("mDate").value=nowLocal();
@@ -687,9 +694,19 @@ async function decodeAudio(blob){
   let ch=ab.getChannelData(0);
   if(ab.numberOfChannels>1){const c1=ab.getChannelData(1),m=new Float32Array(ch.length);for(let i=0;i<ch.length;i++)m[i]=(ch[i]+c1[i])/2;ch=m}else ch=new Float32Array(ch);
   if(ab.sampleRate!==16000){const ratio=ab.sampleRate/16000,n=Math.floor(ch.length/ratio),o=new Float32Array(n);for(let i=0;i<n;i++)o[i]=ch[Math.floor(i*ratio)];ch=o}
-  // 音量正規化：收音太小聲時自動放大
-  let peak=0;for(let i=0;i<ch.length;i+=7){const v=Math.abs(ch[i]);if(v>peak)peak=v}
-  if(peak>0.001&&peak<0.6){const g=Math.min(0.9/peak,30);for(let i=0;i<ch.length;i++)ch[i]*=g}
+  // 1) 濾掉低頻雜音（冷氣、桌面震動）
+  let px=0,py=0;for(let i=0;i<ch.length;i++){const x=ch[i],y=0.97*(py+x-px);px=x;py=y;ch[i]=y}
+  // 2) 分段自動增益：把小聲、距離遠的發言放大到和近處的人差不多
+  const win=8000,n=Math.ceil(ch.length/win),rms=new Float32Array(n);
+  for(let k=0;k<n;k++){let e=0,c=0;const end=Math.min(ch.length,(k+1)*win);for(let i=k*win;i<end;i+=4){e+=ch[i]*ch[i];c++}rms[k]=Math.sqrt(e/Math.max(c,1))}
+  const sorted=Array.from(rms).sort((p,q)=>p-q),floor=Math.max(sorted[Math.floor(n*0.1)]||0,1e-4)*1.8;
+  let g=1;
+  for(let k=0;k<n;k++){
+    const tg=rms[k]>floor?Math.max(1,Math.min(0.09/rms[k],25)):Math.min(g,3);
+    const st=k*win,end=Math.min(ch.length,st+win),len=end-st;
+    for(let i=st;i<end;i++){const v=ch[i]*(g+(tg-g)*(i-st)/len);ch[i]=v>0.98?0.98:v<-0.98?-0.98:v}
+    g=tg;
+  }
   return ch;
 }
 function quietCut(a,target,win){ // 在目標點前 3 秒內找最安靜的位置下刀，避免切到字
@@ -918,6 +935,15 @@ if(/iPhone|iPad|Android/i.test(navigator.userAgent))$("mobileHint").style.displa
 if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol)){navigator.serviceWorker.register("sw.js").catch(()=>{})}
 function netState(){$("netState").textContent=navigator.onLine?"":"｜目前離線"}
 window.addEventListener("online",netState);window.addEventListener("offline",netState);netState();
+
+// ---------- 手機預設：不用即時轉文字，改成錄完自動轉 ----------
+(function(){const mob=/iPhone|iPad|Android/i.test(navigator.userAgent);let o=null;try{o=JSON.parse(localStorage.getItem("recOpts")||"null")}catch(e){}
+  if(o){$("chkSR").checked=!!o.sr;$("chkAuto").checked=!!o.auto;$("chkFar").checked=o.far!==false}
+  else if(mob){$("chkSR").checked=false;$("chkAuto").checked=true}
+  const sv=()=>{try{localStorage.setItem("recOpts",JSON.stringify({sr:$("chkSR").checked,auto:$("chkAuto").checked,far:$("chkFar").checked}))}catch(e){}};
+  ["chkSR","chkAuto","chkFar"].forEach(i=>$(i).addEventListener("change",sv));
+  if(mob)$("mobileHint").textContent="📱 手機建議：關閉「同步即時轉文字」，勾選「結束後自動轉文字」。錄音時請保持本畫面開著，鎖屏或切到其他 App 會中斷錄音。";
+})();
 
 // ---------- 啟動 ----------
 if(!load())$("mDate").value=nowLocal();
